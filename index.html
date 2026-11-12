@@ -48,11 +48,48 @@
   }
   h1::after { transform: scaleX(-1); }
   .board {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
     gap: clamp(.55rem, 2vmin, 1.5rem);
     min-height: 0;
+  }
+  .next-turn {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: grid;
+    place-items: center;
+    width: clamp(2.75rem, 8vmin, 4.5rem);
+    aspect-ratio: 1;
+    padding: 0;
+    border: 2px solid var(--gold);
+    border-radius: 50%;
+    background: #282037;
+    color: var(--gold);
+    box-shadow: 0 0 0 .2rem #10131d, 0 .25rem .8rem #080a11;
+  }
+  .next-turn:not(:disabled):hover { background: #503b78; }
+  .next-turn:disabled { opacity: 1; color: #aba1b7; border-color: var(--line); }
+  .clock-icon {
+    position: relative;
+    width: 50%;
+    aspect-ratio: 1;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+  }
+  .clock-icon::before {
+    content: '';
+    position: absolute;
+    top: 19%;
+    left: calc(50% - 1px);
+    width: 28%;
+    height: 31%;
+    border: solid currentColor;
+    border-width: 0 0 2px 2px;
   }
   .seat {
     padding: 0;
@@ -75,11 +112,29 @@
   }
   .seat.expired { border-color: #fb8d7f; }
   .face {
+    position: relative;
     display: grid;
     align-content: center;
     gap: clamp(.25rem, 1.2vmin, .85rem);
     width: 100%;
     padding: clamp(.55rem, 2.8vmin, 1.9rem);
+  }
+  .combat-banner {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    width: max-content;
+    max-width: calc(100% - 1.1rem);
+    padding: .45em .75em;
+    border: 1px solid var(--gold);
+    border-radius: .55rem;
+    background: #24202d;
+    color: var(--gold);
+    text-align: center;
+    font-size: clamp(.8rem, 3.3vmin, 1.85rem);
+    font-weight: 800;
+    box-shadow: 0 .25rem 1rem #080a11b0;
+    pointer-events: none;
   }
   .opposite .face { transform: rotate(180deg); }
   .top-wide { grid-area: 1 / 1 / 2 / 3; }
@@ -173,9 +228,13 @@
 <body>
 <main>
   <header><h1>Reloj Zorrones MTG</h1></header>
-  <section class="board" aria-label="Relojes de los jugadores"></section>
+  <section class="board" aria-label="Relojes de los jugadores">
+    <button class="next-turn" id="next-turn" type="button" title="Pasar turno" aria-label="Pasar turno" disabled>
+      <span class="clock-icon" aria-hidden="true"></span>
+    </button>
+  </section>
   <footer>
-    <p id="hint">Toca el recuadro del jugador activo para pasar el turno.</p>
+    <p id="hint">Toca la ficha activa para entrar o salir de combate. Usa el reloj central para pasar el turno.</p>
     <div class="controls">
       <button class="control" id="settings" title="Configuración" aria-label="Configuración">⚙</button>
       <button class="control primary" id="play">Iniciar</button>
@@ -196,6 +255,9 @@
       </label>
       <label>Tiempo por jugador (min)
         <input id="minutes" type="number" min="1" max="180" required>
+      </label>
+      <label>Jugador inicial
+        <select id="first-player"></select>
       </label>
       <label>Incremento por turno (s)
         <input id="increment" type="number" min="0" max="120" required>
@@ -222,7 +284,7 @@
 <script>
   const find = (selector) => document.querySelector(selector);
   const storageKey = 'reloj-zorrones-mtg-settings';
-  const defaults = { count: 4, minutes: 10, increment: 0, names: [], sound: true };
+  const defaults = { count: 4, minutes: 10, increment: 0, names: [], sound: true, firstPlayer: 0 };
   let settings = { ...defaults };
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
@@ -230,7 +292,12 @@
         Number.isInteger(saved.minutes) && saved.minutes >= 1 && saved.minutes <= 180 &&
         Number.isInteger(saved.increment) && saved.increment >= 0 && saved.increment <= 120 &&
         Array.isArray(saved.names) && saved.names.every((name) => typeof name === 'string') &&
-        typeof saved.sound === 'boolean') settings = saved;
+        typeof saved.sound === 'boolean') {
+      settings = { ...defaults, ...saved };
+      if (!Number.isInteger(settings.firstPlayer) || settings.firstPlayer < 0 || settings.firstPlayer >= settings.count) {
+        settings.firstPlayer = 0;
+      }
+    }
   } catch {}
 
   const positions = {
@@ -251,20 +318,25 @@
       name: settings.names[index] || 'Jugador ' + (index + 1),
       remaining: settings.minutes * 60000
     }));
-    active = 0;
-    turnStart = players[0].remaining;
+    active = settings.firstPlayer;
+    turnStart = players[active].remaining;
     phase = 'ready';
     cards = players.map((player, index) => {
       const seat = document.createElement('button');
       const position = positions[settings.count][index];
       seat.type = 'button';
       seat.className = 'seat ' + position + (position.startsWith('top') ? ' opposite' : '');
-      seat.innerHTML = '<span class="face"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span></span>';
+      seat.innerHTML = '<span class="face"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span><span class="combat-banner" hidden>Fase de Combate</span></span>';
       seat.querySelector('.name').textContent = player.name;
-      seat.addEventListener('click', () => passTurn(index));
-      return { seat, status: seat.querySelector('.status'), time: seat.querySelector('.time') };
+      seat.addEventListener('click', () => toggleCombat(index));
+      return {
+        seat,
+        status: seat.querySelector('.status'),
+        time: seat.querySelector('.time'),
+        combatBanner: seat.querySelector('.combat-banner')
+      };
     });
-    find('.board').replaceChildren(...cards.map(({ seat }) => seat));
+    find('.board').replaceChildren(...cards.map(({ seat }) => seat), find('#next-turn'));
     update();
   }
 
@@ -292,27 +364,30 @@
   }
 
   function update() {
-    cards.forEach(({ seat, status }, index) => {
+    cards.forEach(({ seat, status, combatBanner }, index) => {
       const current = index === active;
-      const label = current ? { ready: 'PRIMERO', running: 'EN JUEGO', paused: 'EN PAUSA', expired: 'SIN TIEMPO' }[phase] : '';
+      const canToggleCombat = current && (phase === 'running' || phase === 'combat');
+      const label = current ? { ready: 'PRIMERO', running: 'EN JUEGO', combat: '', paused: 'EN PAUSA', expired: 'SIN TIEMPO' }[phase] : '';
       seat.classList.toggle('active', current);
       seat.classList.toggle('expired', current && phase === 'expired');
-      seat.setAttribute('aria-disabled', String(!current || phase !== 'running'));
-      seat.tabIndex = current && phase === 'running' ? 0 : -1;
+      seat.setAttribute('aria-disabled', String(!canToggleCombat));
+      seat.tabIndex = canToggleCombat ? 0 : -1;
+      combatBanner.hidden = !(current && phase === 'combat');
       status.textContent = label;
       status.hidden = !label;
     });
-    find('#play').textContent = { ready: 'Iniciar', running: 'Pausar', paused: 'Reanudar', expired: 'Reanudar' }[phase];
-    find('#play').disabled = phase === 'expired';
+    find('#play').textContent = { ready: 'Iniciar', running: 'Pausar', paused: 'Reanudar', combat: 'En combate', expired: 'Reanudar' }[phase];
+    find('#play').disabled = phase === 'expired' || phase === 'combat';
+    find('#next-turn').disabled = phase !== 'running' && phase !== 'combat';
     find('#reset').disabled = phase === 'ready';
     find('#restart').disabled = phase === 'ready';
     find('#sound').setAttribute('aria-pressed', String(settings.sound));
     find('#sound').textContent = settings.sound ? 'Campana ♪' : 'Sin sonido';
     find('#hint').textContent = phase === 'expired'
       ? players[active].name + ' se quedó sin tiempo.'
-      : 'Toca el recuadro del jugador activo para pasar el turno.';
+      : 'Toca la ficha activa para entrar o salir de combate. Usa el reloj central para pasar el turno.';
     find('#announcement').textContent = phase === 'ready' ? ''
-      : players[active].name + ' · ' + cards[active].status.textContent;
+      : players[active].name + ' · ' + (phase === 'combat' ? 'Fase de Combate' : cards[active].status.textContent);
     paintTimes(performance.now());
     syncWakeLock();
   }
@@ -342,7 +417,7 @@
     frame = requestAnimationFrame(tick);
   }
 
-  function pause() {
+  function pause(nextPhase = 'paused') {
     const left = remaining(performance.now());
     if (left <= 0) {
       expire();
@@ -350,25 +425,30 @@
     }
     players[active].remaining = left;
     cancelAnimationFrame(frame);
-    phase = 'paused';
+    phase = nextPhase;
     update();
   }
 
-  function passTurn(index) {
-    if (phase !== 'running' || index !== active) return;
+  function toggleCombat(index) {
+    if (index !== active) return;
+    if (phase === 'running') pause('combat');
+    else if (phase === 'combat') run();
+  }
+
+  function passTurn() {
+    if (phase !== 'running' && phase !== 'combat') return;
     const now = performance.now();
     const left = remaining(now);
     if (left <= 0) {
       expire();
       return;
     }
-    const hadFocus = document.activeElement === cards[index].seat;
     players[active].remaining = left + settings.increment * 1000;
     active = (active + 1) % players.length;
     turnStart = players[active].remaining;
     bell();
     run(now);
-    if (hadFocus) cards[active].seat.focus({ preventScroll: true });
+
   }
 
   function enableAudio() {
@@ -399,7 +479,7 @@
   }
 
   async function syncWakeLock() {
-    const wanted = () => phase === 'running' && document.visibilityState === 'visible';
+    const wanted = () => (phase === 'running' || phase === 'combat') && document.visibilityState === 'visible';
     if (!wanted()) {
       const lock = wakeLock;
       wakeLock = undefined;
@@ -436,10 +516,15 @@
     return input;
   });
 
-  function showNameFields() {
+  function showNameFields(first = Number(find('#first-player').value)) {
+    const count = Number(find('#count').value);
+    const selector = find('#first-player');
+    selector.replaceChildren();
     nameFields.forEach((input, index) => {
-      input.parentElement.hidden = index >= Number(find('#count').value);
+      input.parentElement.hidden = index >= count;
+      if (index < count) selector.add(new Option(input.value.trim() || 'Jugador ' + (index + 1), index));
     });
+    selector.value = first < count ? first : 0;
   }
 
   find('#settings').onclick = () => {
@@ -448,10 +533,12 @@
     find('#minutes').value = settings.minutes;
     find('#increment').value = settings.increment;
     nameFields.forEach((input, index) => { input.value = settings.names[index] || ''; });
-    showNameFields();
+    showNameFields(settings.firstPlayer);
     config.showModal();
   };
-  find('#count').onchange = showNameFields;
+  find('#count').onchange = () => showNameFields();
+  find('#names').oninput = () => showNameFields();
+  find('#next-turn').onclick = passTurn;
   find('#cancel-settings').onclick = () => config.close();
   find('#setup').onsubmit = (event) => {
     event.preventDefault();
@@ -459,6 +546,7 @@
       count: Number(find('#count').value),
       minutes: Number(find('#minutes').value),
       increment: Number(find('#increment').value),
+      firstPlayer: Number(find('#first-player').value),
       names: nameFields.map((input) => input.value.trim()),
       sound: settings.sound
     };
@@ -468,7 +556,7 @@
   };
   find('#play').onclick = () => {
     if (phase === 'running') pause();
-    else if (phase !== 'expired') {
+    else if (phase === 'ready' || phase === 'paused') {
       enableAudio();
       run();
     }
@@ -483,7 +571,7 @@
     players[active].remaining = turnStart;
     if (phase === 'running') run();
     else {
-      phase = 'paused';
+      if (phase === 'expired') phase = 'paused';
       update();
     }
   };
