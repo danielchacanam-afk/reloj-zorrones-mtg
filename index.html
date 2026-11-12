@@ -118,10 +118,37 @@
   .face {
     position: relative;
     display: grid;
-    align-content: center;
-    gap: clamp(.25rem, 1.2vmin, .85rem);
+    grid-template-rows: minmax(0, 1fr) auto;
     width: 100%;
     padding: clamp(.55rem, 2.8vmin, 1.9rem);
+  }
+  .readout {
+    display: grid;
+    align-self: center;
+    gap: clamp(.25rem, 1.2vmin, .85rem);
+  }
+  .turn-history {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 2px;
+    max-height: calc(2 * var(--turn-chip-height) + 2px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    --turn-chip-height: clamp(1.1rem, 3.5vmin, 1.8rem);
+  }
+  .turn-duration {
+    display: inline-grid;
+    place-items: center;
+    height: var(--turn-chip-height);
+    padding-inline: .42em;
+    border: 1px solid #cda65d;
+    background: #a3772922;
+    color: #ffe298;
+    font-size: clamp(.65rem, 2.05vmin, 1rem);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .combat-effect {
     position: absolute;
@@ -195,7 +222,7 @@
   .opposite .face { transform: rotate(180deg); }
   .top-wide { grid-area: 1 / 1 / 2 / 3; }
   .bottom-wide { grid-area: 2 / 1 / 3 / 3; }
-  .top-wide .face, .bottom-wide .face { align-content: end; }
+  .top-wide .readout, .bottom-wide .readout { align-self: end; }
   .top-left { grid-area: 1 / 1; }
   .top-right { grid-area: 1 / 2; }
   .bottom-left { grid-area: 2 / 1; }
@@ -277,6 +304,9 @@
     main { padding: .4rem .65rem; gap: .45rem; }
     .control { min-height: 2.3rem; padding: .3rem .55rem; }
     .face { padding: .4rem .7rem; }
+    .top-wide:has(.turn-duration) .time, .bottom-wide:has(.turn-duration) .time {
+      font-size: clamp(1.75rem, 10vmin, 3rem);
+    }
   }
 </style>
 </head>
@@ -379,13 +409,14 @@
       const position = positions[settings.count][index];
       seat.type = 'button';
       seat.className = 'seat ' + position + (position.startsWith('top') ? ' opposite' : '');
-      seat.innerHTML = '<span class="face"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span><span class="combat-effect" aria-hidden="true" hidden><span class="combat-slash"></span><span class="combat-flash"></span></span><span class="combat-banner" hidden>Fase de Combate</span></span>';
+      seat.innerHTML = '<span class="face"><span class="readout"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span></span><span class="turn-history" hidden></span><span class="combat-effect" aria-hidden="true" hidden><span class="combat-slash"></span><span class="combat-flash"></span></span><span class="combat-banner" hidden>Fase de Combate</span></span>';
       seat.querySelector('.name').textContent = player.name;
       seat.addEventListener('click', () => toggleCombat(index));
       return {
         seat,
         status: seat.querySelector('.status'),
         time: seat.querySelector('.time'),
+        history: seat.querySelector('.turn-history'),
         combatBanner: seat.querySelector('.combat-banner'),
         combatEffect: seat.querySelector('.combat-effect')
       };
@@ -505,6 +536,14 @@
       expire();
       return;
     }
+    const history = cards[active].history;
+    const entry = document.createElement('span');
+    entry.className = 'turn-duration';
+    entry.textContent = format(Math.floor((turnStart - left) / 1000) * 1000);
+    entry.title = 'Turno ' + (history.childElementCount + 1);
+    history.hidden = false;
+    history.append(entry);
+    history.scrollTop = history.scrollHeight;
     players[active].remaining = left + settings.increment * 1000;
     active = (active + 1) % players.length;
     turnStart = players[active].remaining;
