@@ -63,7 +63,7 @@
     transform: translate(-50%, -50%);
     display: grid;
     place-items: center;
-    width: clamp(2.75rem, 8vmin, 4.5rem);
+    width: clamp(8.25rem, 24vmin, 13.5rem);
     aspect-ratio: 1;
     padding: 0;
     border: 2px solid var(--gold);
@@ -78,20 +78,21 @@
     position: relative;
     width: 50%;
     aspect-ratio: 1;
-    border: 2px solid currentColor;
+    border: clamp(2px, .7vmin, 6px) solid currentColor;
     border-radius: 50%;
   }
   .clock-icon::before {
     content: '';
     position: absolute;
     top: 19%;
-    left: calc(50% - 1px);
+    left: calc(50% - clamp(1px, .35vmin, 3px));
     width: 28%;
     height: 31%;
     border: solid currentColor;
-    border-width: 0 0 2px 2px;
+    border-width: 0 0 clamp(2px, .7vmin, 6px) clamp(2px, .7vmin, 6px);
   }
   .seat {
+    position: relative;
     padding: 0;
     display: grid;
     place-items: stretch;
@@ -109,6 +110,25 @@
     background: radial-gradient(ellipse at 0% 100%, #765120, transparent 56%),
       radial-gradient(ellipse at 100% 100%, #554017, transparent 56%), #211e1b;
     box-shadow: inset 0 0 1.25rem #e5a13465, 0 0 0 1px var(--gold), 0 0 1rem #f5af4790;
+  }
+  .seat.low-time::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid #ff5050;
+    border-radius: inherit;
+    background: radial-gradient(ellipse at center, transparent 25%, #ed142853);
+    box-shadow: inset 0 0 1.15rem #ff3838;
+    opacity: var(--alert-intensity);
+    pointer-events: none;
+    animation: low-time-pulse 1.6s ease-in-out infinite alternate;
+  }
+  @keyframes low-time-pulse {
+    from { opacity: calc(var(--alert-intensity) * .2); }
+    to { opacity: var(--alert-intensity); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .seat.low-time::before { animation: none; }
   }
   .seat.expired { border-color: #fb8d7f; }
   .face {
@@ -133,8 +153,8 @@
     width: 112%;
     height: 34%;
     opacity: 0;
-    filter: drop-shadow(0 0 .3rem #a1f7ff) drop-shadow(0 0 .75rem #46cfff);
-    animation: sword-slash .55s ease-out both;
+    filter: drop-shadow(0 0 .45rem #a1f7ff) drop-shadow(0 0 1.25rem #46cfff);
+    animation: sword-slash .72s ease-out both;
   }
   .combat-slash::before {
     content: '';
@@ -144,6 +164,17 @@
     clip-path: polygon(0 60%, 25% 51%, 38% 48%, 32% 66%, 56% 46%, 49% 35%,
       69% 39%, 63% 19%, 83% 29%, 97% 8%, 91% 44%, 100% 53%, 85% 68%,
       89% 85%, 69% 70%, 62% 92%, 60% 68%, 42% 77%, 47% 61%, 23% 71%);
+  }
+  .combat-flash {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 57% 48%, #fff 0%, #ccf8ff 17%, #66d7ff90 43%, transparent 78%);
+    animation: combat-impact .34s ease-out .43s both;
+  }
+  @keyframes combat-impact {
+    0% { opacity: 0; transform: scale(.64); }
+    18% { opacity: .84; }
+    100% { opacity: 0; transform: scale(1.2); }
   }
   @keyframes sword-slash {
     0% { opacity: 0; transform: translate(-86%, -25%) rotate(-13deg) scale(.2, .5); }
@@ -175,11 +206,12 @@
     font-weight: 800;
     box-shadow: 0 .25rem 1rem #080a11b0;
     pointer-events: none;
-    animation: show-combat-banner .22s ease-out .16s both;
+    animation: show-combat-banner .22s ease-out .49s both;
   }
   .opposite .face { transform: rotate(180deg); }
   .top-wide { grid-area: 1 / 1 / 2 / 3; }
   .bottom-wide { grid-area: 2 / 1 / 3 / 3; }
+  .top-wide .face, .bottom-wide .face { align-content: end; }
   .top-left { grid-area: 1 / 1; }
   .top-right { grid-area: 1 / 2; }
   .bottom-left { grid-area: 2 / 1; }
@@ -281,7 +313,7 @@
       <button class="control primary" id="play">Iniciar</button>
       <button class="control" id="reset">Reiniciar partida</button>
       <button class="control accent" id="restart">Reiniciar turno</button>
-      <button class="control" id="sound" aria-pressed="true">Campana</button>
+      <button class="control" id="sound" aria-pressed="true">Sonido</button>
       <button class="control" id="fullscreen" title="Pantalla completa" aria-label="Pantalla completa">⛶</button>
     </div>
   </footer>
@@ -367,7 +399,7 @@
       const position = positions[settings.count][index];
       seat.type = 'button';
       seat.className = 'seat ' + position + (position.startsWith('top') ? ' opposite' : '');
-      seat.innerHTML = '<span class="face"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span><span class="combat-effect" aria-hidden="true" hidden><span class="combat-slash"></span></span><span class="combat-banner" hidden>Fase de Combate</span></span>';
+      seat.innerHTML = '<span class="face"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span><span class="combat-effect" aria-hidden="true" hidden><span class="combat-slash"></span><span class="combat-flash"></span></span><span class="combat-banner" hidden>Fase de Combate</span></span>';
       seat.querySelector('.name').textContent = player.name;
       seat.addEventListener('click', () => toggleCombat(index));
       return {
@@ -394,14 +426,21 @@
   }
 
   function paintTimes(now) {
-    cards.forEach(({ time }, index) => {
+    const initialSeconds = settings.minutes * 60;
+    cards.forEach(({ seat, time }, index) => {
       const ms = index === active ? remaining(now) : players[index].remaining;
       const value = format(ms);
       if (time.textContent === value) return;
       time.textContent = value;
       const seconds = Math.ceil(ms / 1000);
-      const urgency = Math.max(0, 100 * (1 - seconds / 60));
-      time.style.setProperty('--urgency', urgency + '%');
+      const urgency = Math.max(0, 1 - seconds / initialSeconds);
+      time.style.setProperty('--urgency', 100 * urgency + '%');
+      const lowTime = seconds <= 300;
+      seat.classList.toggle('low-time', lowTime);
+      if (lowTime) {
+        const intensity = .22 + .78 * (1 - seconds / 300);
+        seat.style.setProperty('--alert-intensity', intensity);
+      }
     });
   }
 
@@ -426,7 +465,7 @@
     find('#reset').disabled = phase === 'ready';
     find('#restart').disabled = phase === 'ready';
     find('#sound').setAttribute('aria-pressed', String(settings.sound));
-    find('#sound').textContent = settings.sound ? 'Campana ♪' : 'Sin sonido';
+    find('#sound').textContent = settings.sound ? 'Sonido ♪' : 'Sin sonido';
     find('#hint').textContent = phase === 'expired'
       ? players[active].name + ' se quedó sin tiempo.'
       : 'Toca la ficha activa para entrar o salir de combate. Usa el reloj central para pasar el turno.';
@@ -475,8 +514,10 @@
 
   function toggleCombat(index) {
     if (index !== active) return;
-    if (phase === 'running') pause('combat');
-    else if (phase === 'combat') run();
+    if (phase === 'running') {
+      pause('combat');
+      if (phase === 'combat') swordSound();
+    } else if (phase === 'combat') run();
   }
 
   function passTurn() {
@@ -502,6 +543,43 @@
       audio ??= new Audio();
       if (audio.state !== 'running') audio.resume().catch(() => {});
     } catch {}
+  }
+
+  function swordSound() {
+    if (!settings.sound || audio?.state !== 'running') return;
+    const now = audio.currentTime;
+    const impact = now + .49;
+    const duration = .19;
+    const noise = audio.createBuffer(1, Math.ceil(audio.sampleRate * duration), audio.sampleRate);
+    const samples = noise.getChannelData(0);
+    for (let index = 0; index < samples.length; index++) {
+      samples[index] = Math.random() * 2 - 1;
+    }
+    const strike = audio.createBufferSource();
+    const filter = audio.createBiquadFilter();
+    const strikeVolume = audio.createGain();
+    strike.buffer = noise;
+    filter.type = 'bandpass';
+    filter.frequency.value = 2800;
+    filter.Q.value = .8;
+    strikeVolume.gain.setValueAtTime(.26, impact);
+    strikeVolume.gain.exponentialRampToValueAtTime(.001, impact + duration);
+    strike.connect(filter).connect(strikeVolume).connect(audio.destination);
+    strike.start(impact);
+    strike.onended = () => { strike.disconnect(); filter.disconnect(); strikeVolume.disconnect(); };
+
+    [1060, 1747, 2731, 3593].forEach((frequency, index) => {
+      const ring = audio.createOscillator();
+      const volume = audio.createGain();
+      const end = impact + .53 - index * .085;
+      ring.frequency.value = frequency;
+      volume.gain.setValueAtTime(.12 / (index + 1), impact);
+      volume.gain.exponentialRampToValueAtTime(.001, end);
+      ring.connect(volume).connect(audio.destination);
+      ring.start(impact);
+      ring.stop(end);
+      ring.onended = () => { ring.disconnect(); volume.disconnect(); };
+    });
   }
 
   function bell(expired = false) {
