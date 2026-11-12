@@ -119,6 +119,46 @@
     width: 100%;
     padding: clamp(.55rem, 2.8vmin, 1.9rem);
   }
+  .combat-effect {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .combat-slash {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 112%;
+    height: 34%;
+    opacity: 0;
+    filter: drop-shadow(0 0 .3rem #a1f7ff) drop-shadow(0 0 .75rem #46cfff);
+    animation: sword-slash .55s ease-out both;
+  }
+  .combat-slash::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, #55d9ff, #f5ffff 40%, #fff 54%, #50d7ff);
+    clip-path: polygon(0 60%, 25% 51%, 38% 48%, 32% 66%, 56% 46%, 49% 35%,
+      69% 39%, 63% 19%, 83% 29%, 97% 8%, 91% 44%, 100% 53%, 85% 68%,
+      89% 85%, 69% 70%, 62% 92%, 60% 68%, 42% 77%, 47% 61%, 23% 71%);
+  }
+  @keyframes sword-slash {
+    0% { opacity: 0; transform: translate(-86%, -25%) rotate(-13deg) scale(.2, .5); }
+    24% { opacity: 1; transform: translate(-52%, -49%) rotate(-13deg) scale(1, 1); }
+    48% { opacity: .9; transform: translate(-43%, -55%) rotate(-13deg) scale(1.08, .83); }
+    100% { opacity: 0; transform: translate(-28%, -70%) rotate(-13deg) scale(1.2, .15); }
+  }
+  @keyframes show-combat-banner {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(.94); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .combat-effect { display: none; }
+    .combat-banner { animation: none !important; }
+  }
   .combat-banner {
     position: absolute;
     inset: 50% auto auto 50%;
@@ -135,6 +175,7 @@
     font-weight: 800;
     box-shadow: 0 .25rem 1rem #080a11b0;
     pointer-events: none;
+    animation: show-combat-banner .22s ease-out .16s both;
   }
   .opposite .face { transform: rotate(180deg); }
   .top-wide { grid-area: 1 / 1 / 2 / 3; }
@@ -326,14 +367,15 @@
       const position = positions[settings.count][index];
       seat.type = 'button';
       seat.className = 'seat ' + position + (position.startsWith('top') ? ' opposite' : '');
-      seat.innerHTML = '<span class="face"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span><span class="combat-banner" hidden>Fase de Combate</span></span>';
+      seat.innerHTML = '<span class="face"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span><span class="combat-effect" aria-hidden="true" hidden><span class="combat-slash"></span></span><span class="combat-banner" hidden>Fase de Combate</span></span>';
       seat.querySelector('.name').textContent = player.name;
       seat.addEventListener('click', () => toggleCombat(index));
       return {
         seat,
         status: seat.querySelector('.status'),
         time: seat.querySelector('.time'),
-        combatBanner: seat.querySelector('.combat-banner')
+        combatBanner: seat.querySelector('.combat-banner'),
+        combatEffect: seat.querySelector('.combat-effect')
       };
     });
     find('.board').replaceChildren(...cards.map(({ seat }) => seat), find('#next-turn'));
@@ -364,7 +406,7 @@
   }
 
   function update() {
-    cards.forEach(({ seat, status, combatBanner }, index) => {
+    cards.forEach(({ seat, status, combatBanner, combatEffect }, index) => {
       const current = index === active;
       const canToggleCombat = current && (phase === 'running' || phase === 'combat');
       const label = current ? { ready: 'PRIMERO', running: 'EN JUEGO', combat: '', paused: 'EN PAUSA', expired: 'SIN TIEMPO' }[phase] : '';
@@ -372,7 +414,9 @@
       seat.classList.toggle('expired', current && phase === 'expired');
       seat.setAttribute('aria-disabled', String(!canToggleCombat));
       seat.tabIndex = canToggleCombat ? 0 : -1;
-      combatBanner.hidden = !(current && phase === 'combat');
+      const inCombat = current && phase === 'combat';
+      combatBanner.hidden = !inCombat;
+      combatEffect.hidden = !inCombat;
       status.textContent = label;
       status.hidden = !label;
     });
