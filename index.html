@@ -115,13 +115,15 @@
   .expired .status { background: #fb8d7f; }
   .time {
     text-align: center;
-    color: #e1e5ee;
+    --time-color: #e1e5ee;
+    color: var(--time-color);
+    color: color-mix(in srgb, var(--time-color), #ff6565 var(--urgency, 0%));
+    transition: color .35s linear;
     font: bold clamp(1.9rem, min(11vw, 15vmin), 8.5rem)/1 Georgia, serif;
     font-variant-numeric: lining-nums tabular-nums;
     letter-spacing: -.04em;
   }
-  .active .time { color: #ffe298; }
-  .expired .time { color: #ffaea3; }
+  .active .time { --time-color: #ffe298; }
   footer p { margin: 0 0 .55rem; color: #ded8d1; font-size: clamp(.75rem, 2.3vmin, .95rem); }
   .controls, .dialog-actions {
     display: flex;
@@ -279,8 +281,13 @@
 
   function paintTimes(now) {
     cards.forEach(({ time }, index) => {
-      const value = format(index === active ? remaining(now) : players[index].remaining);
-      if (time.textContent !== value) time.textContent = value;
+      const ms = index === active ? remaining(now) : players[index].remaining;
+      const value = format(ms);
+      if (time.textContent === value) return;
+      time.textContent = value;
+      const seconds = Math.ceil(ms / 1000);
+      const urgency = Math.max(0, 100 * (1 - seconds / 60));
+      time.style.setProperty('--urgency', urgency + '%');
     });
   }
 
