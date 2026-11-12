@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#121520">
+<title>Reloj Zorrones MTG</title>
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: system-ui, sans-serif;
+    background: #10131d;
+    color: #f4ede3;
+    --gold: #ffd575;
+    --line: #677287;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: radial-gradient(ellipse at 96% 0%, #463158, transparent 34%),
+      radial-gradient(ellipse at 0% 100%, #253d58, transparent 44%),
+      radial-gradient(ellipse at 100% 100%, #252e49, transparent 42%), #10131d;
+  }
+  main {
+    width: min(100%, 100rem);
+    min-height: 100dvh;
+    margin: auto;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: clamp(.55rem, 2vmin, 1.25rem);
+    padding: clamp(.65rem, 2.5vmin, 1.75rem);
+  }
+  header, footer { text-align: center; }
+  h1 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .65em;
+    font: bold clamp(1.2rem, 4.8vmin, 3rem) Georgia, serif;
+  }
+  h1::before, h1::after {
+    content: "";
+    width: min(14vw, 9rem);
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #ad7a35);
+  }
+  h1::after { transform: scaleX(-1); }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: clamp(.55rem, 2vmin, 1.5rem);
+    min-height: 0;
+  }
+  .seat {
+    padding: 0;
+    display: grid;
+    place-items: stretch;
+    min-width: 0;
+    min-height: 0;
+    text-align: initial;
+    border: 1px solid var(--line);
+    border-radius: clamp(.65rem, 2vmin, 1.3rem);
+    background: linear-gradient(145deg, #212736, #11151e 62%, #202635);
+    box-shadow: inset 0 0 1.3rem #080b1470, 0 .3rem .85rem #07091470;
+  }
+  .seat[aria-disabled="true"] { cursor: default; }
+  .seat.active {
+    border-color: var(--gold);
+    background: radial-gradient(ellipse at 0% 100%, #765120, transparent 56%),
+      radial-gradient(ellipse at 100% 100%, #554017, transparent 56%), #211e1b;
+    box-shadow: inset 0 0 1.25rem #e5a13465, 0 0 0 1px var(--gold), 0 0 1rem #f5af4790;
+  }
+  .seat.expired { border-color: #fb8d7f; }
+  .face {
+    display: grid;
+    align-content: center;
+    gap: clamp(.25rem, 1.2vmin, .85rem);
+    width: 100%;
+    padding: clamp(.55rem, 2.8vmin, 1.9rem);
+  }
+  .opposite .face { transform: rotate(180deg); }
+  .top-wide { grid-area: 1 / 1 / 2 / 3; }
+  .bottom-wide { grid-area: 2 / 1 / 3 / 3; }
+  .top-left { grid-area: 1 / 1; }
+  .top-right { grid-area: 1 / 2; }
+  .bottom-left { grid-area: 2 / 1; }
+  .bottom-right { grid-area: 2 / 2; }
+  .identity {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .3rem;
+    padding-bottom: .3em;
+    border-bottom: 1px solid #b7bcd347;
+  }
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: clamp(.8rem, 3.8vmin, 2.4rem);
+    font-weight: 700;
+  }
+  .status {
+    flex-shrink: 0;
+    border-radius: .35em;
+    padding: .3em .55em;
+    color: #211706;
+    background: var(--gold);
+    font-size: clamp(.57rem, 1.8vmin, .95rem);
+    font-weight: 800;
+  }
+  .expired .status { background: #fb8d7f; }
+  .time {
+    text-align: center;
+    color: #e1e5ee;
+    font: bold clamp(1.9rem, min(11vw, 15vmin), 8.5rem)/1 Georgia, serif;
+    font-variant-numeric: lining-nums tabular-nums;
+    letter-spacing: -.04em;
+  }
+  .active .time { color: #ffe298; }
+  .expired .time { color: #ffaea3; }
+  footer p { margin: 0 0 .55rem; color: #ded8d1; font-size: clamp(.75rem, 2.3vmin, .95rem); }
+  .controls, .dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .45rem;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; touch-action: manipulation; }
+  .control, input, select {
+    border: 1px solid #687286;
+    border-radius: .55rem;
+    background: #202635;
+    padding: .48rem .72rem;
+  }
+  .control { min-height: 2.65rem; font-size: .88rem; }
+  .primary { background: #503b78; border-color: #9779c8; }
+  .accent { color: var(--gold); border-color: #bd8b3e; background: #34291d; }
+  button:disabled { opacity: .45; cursor: default; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  dialog {
+    width: min(92vw, 29rem);
+    max-height: 90dvh;
+    padding: 1.15rem;
+    border: 1px solid var(--line);
+    border-radius: .9rem;
+    background: #181d2a;
+    color: inherit;
+  }
+  dialog::backdrop { background: #080a11cc; }
+  dialog h2 { margin: 0 0 .7rem; font: bold 1.45rem Georgia, serif; }
+  dialog p { color: #d8d9e4; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
+  label { display: grid; gap: .25rem; font-size: .84rem; }
+  input, select { width: 100%; min-width: 0; }
+  .dialog-actions { justify-content: flex-end; margin-top: 1rem; }
+  [hidden] { display: none !important; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  @media (orientation: landscape) and (max-height: 480px) {
+    main { padding: .4rem .65rem; gap: .45rem; }
+    footer p { display: none; }
+    .control { min-height: 2.3rem; padding: .3rem .55rem; }
+    .face { padding: .4rem .7rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Reloj Zorrones MTG</h1></header>
+  <section class="board" aria-label="Relojes de los jugadores"></section>
+  <footer>
+    <p id="hint">Toca el recuadro del jugador activo para pasar el turno.</p>
+    <div class="controls">
+      <button class="control" id="settings" title="Configuración" aria-label="Configuración">⚙</button>
+      <button class="control primary" id="play">Iniciar</button>
+      <button class="control" id="reset">Reiniciar partida</button>
+      <button class="control accent" id="restart">Reiniciar turno</button>
+      <button class="control" id="sound" aria-pressed="true">Campana</button>
+      <button class="control" id="fullscreen" title="Pantalla completa" aria-label="Pantalla completa">⛶</button>
+    </div>
+  </footer>
+  <span class="sr-only" id="announcement" role="status"></span>
+</main>
+<dialog id="configuration" aria-labelledby="configuration-title">
+  <form id="setup">
+    <h2 id="configuration-title">Configuración</h2>
+    <div class="fields">
+      <label>Jugadores
+        <select id="count"><option>2</option><option>3</option><option>4</option></select>
+      </label>
+      <label>Tiempo por jugador (min)
+        <input id="minutes" type="number" min="1" max="180" required>
+      </label>
+      <label>Incremento por turno (s)
+        <input id="increment" type="number" min="0" max="120" required>
+      </label>
+    </div>
+    <p>El orden de los nombres es el orden de los turnos. Los cambios se aplican a una partida nueva.</p>
+    <div class="fields" id="names"></div>
+    <div class="dialog-actions">
+      <button class="control" id="cancel-settings" type="button">Cancelar</button>
+      <button class="control primary">Aplicar</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="confirm-reset" aria-labelledby="reset-title">
+  <form method="dialog">
+    <h2 id="reset-title">Reiniciar partida</h2>
+    <p>Todos los jugadores recuperarán su tiempo inicial.</p>
+    <div class="dialog-actions">
+      <button class="control" value="cancel" autofocus>Cancelar</button>
+      <button class="control accent" value="reset">Reiniciar</button>
+    </div>
+  </form>
+</dialog>
+<script>
+  const find = (selector) => document.querySelector(selector);
+  const storageKey = 'reloj-zorrones-mtg-settings';
+  const defaults = { count: 4, minutes: 10, increment: 0, names: [], sound: true };
+  let settings = { ...defaults };
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey));
+    if (saved && [2, 3, 4].includes(saved.count) &&
+        Number.isInteger(saved.minutes) && saved.minutes >= 1 && saved.minutes <= 180 &&
+        Number.isInteger(saved.increment) && saved.increment >= 0 && saved.increment <= 120 &&
+        Array.isArray(saved.names) && saved.names.every((name) => typeof name === 'string') &&
+        typeof saved.sound === 'boolean') settings = saved;
+  } catch {}
+
+  const positions = {
+    2: ['bottom-wide', 'top-wide'],
+    3: ['bottom-left', 'top-wide', 'bottom-right'],
+    4: ['bottom-left', 'top-left', 'top-right', 'bottom-right']
+  };
+  let players, active, turnStart, startedAt, phase, frame, cards;
+  let audio, wakeLock, requestingWakeLock = false;
+
+  function saveSettings() {
+    try { localStorage.setItem(storageKey, JSON.stringify(settings)); } catch {}
+  }
+
+  function newGame() {
+    cancelAnimationFrame(frame);
+    players = Array.from({ length: settings.count }, (_, index) => ({
+      name: settings.names[index] || 'Jugador ' + (index + 1),
+      remaining: settings.minutes * 60000
+    }));
+    active = 0;
+    turnStart = players[0].remaining;
+    phase = 'ready';
+    cards = players.map((player, index) => {
+      const seat = document.createElement('button');
+      const position = positions[settings.count][index];
+      seat.type = 'button';
+      seat.className = 'seat ' + position + (position.startsWith('top') ? ' opposite' : '');
+      seat.innerHTML = '<span class="face"><span class="identity"><span class="name"></span><span class="status"></span></span><span class="time" aria-hidden="true"></span></span>';
+      seat.querySelector('.name').textContent = player.name;
+      seat.addEventListener('click', () => passTurn(index));
+      return { seat, status: seat.querySelector('.status'), time: seat.querySelector('.time') };
+    });
+    find('.board').replaceChildren(...cards.map(({ seat }) => seat));
+    update();
+  }
+
+  function remaining(now) {
+    const bank = players[active].remaining;
+    return phase === 'running' ? Math.max(0, bank - (now - startedAt)) : bank;
+  }
+
+  function format(ms) {
+    const seconds = Math.ceil(ms / 1000);
+    return String(Math.floor(seconds / 60)).padStart(2, '0') + ':' +
+      String(seconds % 60).padStart(2, '0');
+  }
+
+  function paintTimes(now) {
+    cards.forEach(({ time }, index) => {
+      const value = format(index === active ? remaining(now) : players[index].remaining);
+      if (time.textContent !== value) time.textContent = value;
+    });
+  }
+
+  function update() {
+    cards.forEach(({ seat, status }, index) => {
+      const current = index === active;
+      const label = current ? { ready: 'PRIMERO', running: 'EN JUEGO', paused: 'EN PAUSA', expired: 'SIN TIEMPO' }[phase] : '';
+      seat.classList.toggle('active', current);
+      seat.classList.toggle('expired', current && phase === 'expired');
+      seat.setAttribute('aria-disabled', String(!current || phase !== 'running'));
+      seat.tabIndex = current && phase === 'running' ? 0 : -1;
+      status.textContent = label;
+      status.hidden = !label;
+    });
+    find('#play').textContent = { ready: 'Iniciar', running: 'Pausar', paused: 'Reanudar', expired: 'Reanudar' }[phase];
+    find('#play').disabled = phase === 'expired';
+    find('#reset').disabled = phase === 'ready';
+    find('#restart').disabled = phase === 'ready';
+    find('#sound').setAttribute('aria-pressed', String(settings.sound));
+    find('#sound').textContent = settings.sound ? 'Campana ♪' : 'Sin sonido';
+    find('#hint').textContent = phase === 'expired'
+      ? players[active].name + ' se quedó sin tiempo.'
+      : 'Toca el recuadro del jugador activo para pasar el turno.';
+    find('#announcement').textContent = phase === 'ready' ? ''
+      : players[active].name + ' · ' + cards[active].status.textContent;
+    paintTimes(performance.now());
+    syncWakeLock();
+  }
+
+  function expire() {
+    cancelAnimationFrame(frame);
+    players[active].remaining = 0;
+    phase = 'expired';
+    bell(true);
+    update();
+  }
+
+  function tick(now) {
+    if (remaining(now) <= 0) {
+      expire();
+      return;
+    }
+    paintTimes(now);
+    frame = requestAnimationFrame(tick);
+  }
+
+  function run(now = performance.now()) {
+    cancelAnimationFrame(frame);
+    phase = 'running';
+    startedAt = now;
+    update();
+    frame = requestAnimationFrame(tick);
+  }
+
+  function pause() {
+    const left = remaining(performance.now());
+    if (left <= 0) {
+      expire();
+      return;
+    }
+    players[active].remaining = left;
+    cancelAnimationFrame(frame);
+    phase = 'paused';
+    update();
+  }
+
+  function passTurn(index) {
+    if (phase !== 'running' || index !== active) return;
+    const now = performance.now();
+    const left = remaining(now);
+    if (left <= 0) {
+      expire();
+      return;
+    }
+    const hadFocus = document.activeElement === cards[index].seat;
+    players[active].remaining = left + settings.increment * 1000;
+    active = (active + 1) % players.length;
+    turnStart = players[active].remaining;
+    bell();
+    run(now);
+    if (hadFocus) cards[active].seat.focus({ preventScroll: true });
+  }
+
+  function enableAudio() {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!settings.sound || !Audio) return;
+    try {
+      audio ??= new Audio();
+      if (audio.state !== 'running') audio.resume().catch(() => {});
+    } catch {}
+  }
+
+  function bell(expired = false) {
+    if (!settings.sound || audio?.state !== 'running') return;
+    const now = audio.currentTime;
+    const fundamental = expired ? 430 : 790;
+    [1, 2.01, 2.76].forEach((partial, index) => {
+      const note = audio.createOscillator();
+      const volume = audio.createGain();
+      const duration = .6 - index * .12;
+      note.frequency.value = fundamental * partial;
+      volume.gain.setValueAtTime(.19 / (index + 1), now);
+      volume.gain.exponentialRampToValueAtTime(.001, now + duration);
+      note.connect(volume).connect(audio.destination);
+      note.start(now);
+      note.stop(now + duration);
+      note.onended = () => { note.disconnect(); volume.disconnect(); };
+    });
+  }
+
+  async function syncWakeLock() {
+    const wanted = () => phase === 'running' && document.visibilityState === 'visible';
+    if (!wanted()) {
+      const lock = wakeLock;
+      wakeLock = undefined;
+      if (lock) await lock.release().catch(() => {});
+      return;
+    }
+    if (!navigator.wakeLock || wakeLock || requestingWakeLock) return;
+    requestingWakeLock = true;
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      if (!wanted()) {
+        await lock.release();
+        return;
+      }
+      wakeLock = lock;
+      lock.addEventListener('release', () => {
+        if (wakeLock === lock) wakeLock = undefined;
+      });
+    } catch {
+    } finally {
+      requestingWakeLock = false;
+    }
+  }
+
+  const config = find('#configuration');
+  const reset = find('#confirm-reset');
+  const nameFields = Array.from({ length: 4 }, (_, index) => {
+    const label = document.createElement('label');
+    label.textContent = 'Jugador ' + (index + 1);
+    const input = document.createElement('input');
+    input.maxLength = 30;
+    label.append(input);
+    find('#names').append(label);
+    return input;
+  });
+
+  function showNameFields() {
+    nameFields.forEach((input, index) => {
+      input.parentElement.hidden = index >= Number(find('#count').value);
+    });
+  }
+
+  find('#settings').onclick = () => {
+    if (phase === 'running') pause();
+    find('#count').value = settings.count;
+    find('#minutes').value = settings.minutes;
+    find('#increment').value = settings.increment;
+    nameFields.forEach((input, index) => { input.value = settings.names[index] || ''; });
+    showNameFields();
+    config.showModal();
+  };
+  find('#count').onchange = showNameFields;
+  find('#cancel-settings').onclick = () => config.close();
+  find('#setup').onsubmit = (event) => {
+    event.preventDefault();
+    settings = {
+      count: Number(find('#count').value),
+      minutes: Number(find('#minutes').value),
+      increment: Number(find('#increment').value),
+      names: nameFields.map((input) => input.value.trim()),
+      sound: settings.sound
+    };
+    saveSettings();
+    config.close();
+    newGame();
+  };
+  find('#play').onclick = () => {
+    if (phase === 'running') pause();
+    else if (phase !== 'expired') {
+      enableAudio();
+      run();
+    }
+  };
+  find('#reset').onclick = () => {
+    if (phase === 'running') pause();
+    reset.returnValue = '';
+    reset.showModal();
+  };
+  reset.onclose = () => { if (reset.returnValue === 'reset') newGame(); };
+  find('#restart').onclick = () => {
+    players[active].remaining = turnStart;
+    if (phase === 'running') run();
+    else {
+      phase = 'paused';
+      update();
+    }
+  };
+  find('#sound').onclick = () => {
+    settings.sound = !settings.sound;
+    enableAudio();
+    saveSettings();
+    update();
+  };
+
+  const fullscreen = find('#fullscreen');
+  fullscreen.hidden = !document.fullscreenEnabled;
+  fullscreen.onclick = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      find('#announcement').textContent = 'Pantalla completa no disponible.';
+    }
+  };
+  document.addEventListener('fullscreenchange', () => {
+    const label = document.fullscreenElement ? 'Salir de pantalla completa' : 'Pantalla completa';
+    fullscreen.title = label;
+    fullscreen.setAttribute('aria-label', label);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && phase === 'running') {
+      cancelAnimationFrame(frame);
+      tick(performance.now());
+    }
+    syncWakeLock();
+  });
+  newGame();
+</script>
+</body>
+</html>
