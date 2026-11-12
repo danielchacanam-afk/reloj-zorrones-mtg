@@ -27,26 +27,10 @@
     min-height: 100dvh;
     margin: auto;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto;
     gap: clamp(.55rem, 2vmin, 1.25rem);
     padding: clamp(.65rem, 2.5vmin, 1.75rem);
   }
-  header, footer { text-align: center; }
-  h1 {
-    margin: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: .65em;
-    font: bold clamp(1.2rem, 4.8vmin, 3rem) Georgia, serif;
-  }
-  h1::before, h1::after {
-    content: "";
-    width: min(14vw, 9rem);
-    height: 1px;
-    background: linear-gradient(90deg, transparent, #ad7a35);
-  }
-  h1::after { transform: scaleX(-1); }
   .board {
     position: relative;
     display: grid;
@@ -252,7 +236,6 @@
     letter-spacing: -.04em;
   }
   .active .time { --time-color: #ffe298; }
-  footer p { margin: 0 0 .55rem; color: #ded8d1; font-size: clamp(.75rem, 2.3vmin, .95rem); }
   .controls, .dialog-actions {
     display: flex;
     flex-wrap: wrap;
@@ -292,7 +275,6 @@
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   @media (orientation: landscape) and (max-height: 480px) {
     main { padding: .4rem .65rem; gap: .45rem; }
-    footer p { display: none; }
     .control { min-height: 2.3rem; padding: .3rem .55rem; }
     .face { padding: .4rem .7rem; }
   }
@@ -300,14 +282,12 @@
 </head>
 <body>
 <main>
-  <header><h1>Reloj Zorrones MTG</h1></header>
   <section class="board" aria-label="Relojes de los jugadores">
     <button class="next-turn" id="next-turn" type="button" title="Pasar turno" aria-label="Pasar turno" disabled>
       <span class="clock-icon" aria-hidden="true"></span>
     </button>
   </section>
   <footer>
-    <p id="hint">Toca la ficha activa para entrar o salir de combate. Usa el reloj central para pasar el turno.</p>
     <div class="controls">
       <button class="control" id="settings" title="Configuración" aria-label="Configuración">⚙</button>
       <button class="control primary" id="play">Iniciar</button>
@@ -466,9 +446,6 @@
     find('#restart').disabled = phase === 'ready';
     find('#sound').setAttribute('aria-pressed', String(settings.sound));
     find('#sound').textContent = settings.sound ? 'Sonido ♪' : 'Sin sonido';
-    find('#hint').textContent = phase === 'expired'
-      ? players[active].name + ' se quedó sin tiempo.'
-      : 'Toca la ficha activa para entrar o salir de combate. Usa el reloj central para pasar el turno.';
     find('#announcement').textContent = phase === 'ready' ? ''
       : players[active].name + ' · ' + (phase === 'combat' ? 'Fase de Combate' : cards[active].status.textContent);
     paintTimes(performance.now());
@@ -516,7 +493,7 @@
     if (index !== active) return;
     if (phase === 'running') {
       pause('combat');
-      if (phase === 'combat') swordSound();
+      if (phase === 'combat') thunderSound();
     } else if (phase === 'combat') run();
   }
 
@@ -545,11 +522,11 @@
     } catch {}
   }
 
-  function swordSound() {
+  function thunderSound() {
     if (!settings.sound || audio?.state !== 'running') return;
     const now = audio.currentTime;
     const impact = now + .49;
-    const duration = .19;
+    const duration = 1.35;
     const noise = audio.createBuffer(1, Math.ceil(audio.sampleRate * duration), audio.sampleRate);
     const samples = noise.getChannelData(0);
     for (let index = 0; index < samples.length; index++) {
@@ -562,18 +539,47 @@
     filter.type = 'bandpass';
     filter.frequency.value = 2800;
     filter.Q.value = .8;
-    strikeVolume.gain.setValueAtTime(.26, impact);
-    strikeVolume.gain.exponentialRampToValueAtTime(.001, impact + duration);
+    strikeVolume.gain.setValueAtTime(.34, impact);
+    strikeVolume.gain.exponentialRampToValueAtTime(.001, impact + .2);
     strike.connect(filter).connect(strikeVolume).connect(audio.destination);
+    const lowpass = audio.createBiquadFilter();
+    const rumble = audio.createGain();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.setValueAtTime(580, impact);
+    lowpass.frequency.exponentialRampToValueAtTime(125, impact + duration);
+    rumble.gain.setValueAtTime(.64, impact);
+    rumble.gain.exponentialRampToValueAtTime(.25, impact + .16);
+    rumble.gain.linearRampToValueAtTime(.34, impact + .29);
+    rumble.gain.exponentialRampToValueAtTime(.001, impact + duration);
+    strike.connect(lowpass).connect(rumble).connect(audio.destination);
     strike.start(impact);
-    strike.onended = () => { strike.disconnect(); filter.disconnect(); strikeVolume.disconnect(); };
+    strike.onended = () => {
+      strike.disconnect();
+      filter.disconnect();
+      strikeVolume.disconnect();
+      lowpass.disconnect();
+      rumble.disconnect();
+    };
+
+    const bass = audio.createOscillator();
+    const bassVolume = audio.createGain();
+    bass.type = 'triangle';
+    bass.frequency.setValueAtTime(145, impact);
+    bass.frequency.exponentialRampToValueAtTime(48, impact + .62);
+    bassVolume.gain.setValueAtTime(.001, impact);
+    bassVolume.gain.exponentialRampToValueAtTime(.2, impact + .045);
+    bassVolume.gain.exponentialRampToValueAtTime(.001, impact + .68);
+    bass.connect(bassVolume).connect(audio.destination);
+    bass.start(impact);
+    bass.stop(impact + .68);
+    bass.onended = () => { bass.disconnect(); bassVolume.disconnect(); };
 
     [1060, 1747, 2731, 3593].forEach((frequency, index) => {
       const ring = audio.createOscillator();
       const volume = audio.createGain();
       const end = impact + .53 - index * .085;
       ring.frequency.value = frequency;
-      volume.gain.setValueAtTime(.12 / (index + 1), impact);
+      volume.gain.setValueAtTime(.07 / (index + 1), impact);
       volume.gain.exponentialRampToValueAtTime(.001, end);
       ring.connect(volume).connect(audio.destination);
       ring.start(impact);
